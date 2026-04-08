@@ -36,3 +36,41 @@ Chọn metrics, đặt threshold, xác định red flag. Câu hỏi quan trọng
 | Recall (tìm được/tổng có đáp án) | ≥90% | <80% → khách không tìm được |
 | Accuracy (đúng trong số đã trả lời) | ≥80% | <70% → gợi ý sai quá nhiều |
 | Deflection rate (không cần nhân viên) | ≥60% | <40% → chưa tiết kiệm nhân lực |
+
+---
+
+## Mở rộng (optional — bonus)
+
+### User-facing metrics vs internal metrics
+
+Không phải metric nào cũng nên show cho user. Phân loại:
+
+| Metric | User thấy? | Dùng để làm gì |
+|--------|-----------|-----------------|
+| *VD: Confidence score* | ☐ Có ☐ Không | *Show khi >70% để user tin, ẩn khi thấp để không gây hoang mang* |
+| *VD: Response latency* | ☐ Có ☐ Không | *User không cần thấy số ms, nhưng >5s cần hiện loading state* |
+| *VD: Correction rate* | ☐ Có ☐ Không | *Internal: theo dõi chất lượng. User chỉ cần thấy "đã cải thiện"* |
+
+### Offline eval vs online eval
+
+| Loại | Khi nào | Đo gì | Ví dụ |
+|------|---------|-------|-------|
+| **Offline** | Trước khi deploy | Accuracy trên test set | Chạy 100 câu hỏi mẫu, đo precision/recall |
+| **Online** | Sau khi deploy | Hành vi user thật | User click "helpful"? User sửa kết quả? User quay lại dùng? |
+
+- Product đang đo gì? Thiếu gì?
+- Offline metric cao nhưng online metric thấp → vấn đề gì?
+
+### A/B test design (nếu có thời gian)
+
+Nếu đưa product ra thật, sẽ A/B test gì đầu tiên?
+
+| Test | Variant A | Variant B | Metric theo dõi | Kết quả mong đợi |
+|------|-----------|-----------|------------------|-------------------|
+| *VD: Hiện confidence* | Hiện % confidence | Không hiện | Trust score, correction rate | Hiện confidence → ít correction hơn |
+
+### Câu hỏi mở rộng
+
+- Metric nào đo được sớm nhất (ngày 1)? Metric nào cần thời gian (tuần/tháng)?
+- Nếu chỉ được chọn 1 metric duy nhất để theo dõi, chọn gì? Tại sao?
+- Metric đang chọn có bị "game" được không? (VD: AI từ chối trả lời nhiều → precision cao nhưng vô dụng)

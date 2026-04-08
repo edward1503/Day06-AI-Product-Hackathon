@@ -42,3 +42,37 @@ Mỗi feature AI chính = 1 bảng. AI trả lời xong → chuyện gì xảy r
 - Path "Failure" quan trọng nhất: user biết AI sai bằng cách nào? Nếu không biết → nguy hiểm
 - Path "Correction" = nguồn data cho feedback loop — thiết kế sớm, không để sau
 - Mỗi path có câu hỏi thiết kế riêng, không copy-paste
+
+---
+
+## Mở rộng (optional — bonus)
+
+### Transition flow giữa các path
+
+Vẽ diagram hoặc mô tả: user chuyển từ path này sang path khác thế nào?
+
+```
+Happy → Failure: user ban đầu tin AI đúng, sau mới phát hiện sai (delayed failure)
+Low-confidence → Happy: AI không chắc, user chọn đúng → AI học, lần sau tự tin hơn
+Failure → Correction → Happy: user sửa → data mới → model cải thiện → lần sau đúng
+Failure → Bỏ dùng: user sửa quá nhiều lần → mất kiên nhẫn → churn
+```
+
+- Mỗi mũi tên = 1 điểm thiết kế UX. Bao nhiêu lần failure trước khi user bỏ dùng?
+- Transition nào product đang không hỗ trợ?
+
+### Edge cases
+
+Liệt kê 3-5 tình huống biên mà AI sẽ gặp khó:
+
+| Edge case | Dự đoán AI sẽ xử lý thế nào | UX nên phản ứng ra sao |
+|-----------|------------------------------|------------------------|
+| *VD: Input bằng ngôn ngữ khác* |   |   |
+| *VD: Input cố tình gây lỗi (adversarial)* |   |   |
+| *VD: Input quá dài / quá ngắn* |   |   |
+
+### Câu hỏi mở rộng
+
+- Nếu user sửa AI 10 lần liên tiếp, UI có nên thay đổi hành vi không? (VD: tắt auto, chuyển sang gợi ý)
+- User mới vs user cũ: 4 paths có cần thiết kế khác nhau không?
+- Nếu 2 user sửa AI theo 2 hướng ngược nhau, hệ thống ưu tiên ai?

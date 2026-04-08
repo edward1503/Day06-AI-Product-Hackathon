@@ -38,3 +38,41 @@ Cấu trúc demo cho demo round. Tổng 2 phút, mỗi người trong nhóm nói
 - [ ] Dry run ít nhất 1 lần, bấm giờ
 - [ ] Backup plan nếu demo crash
 - [ ] Mỗi người trả lời được: "Auto hay aug?", "Failure mode chính?", "Phần mình làm gì?"
+
+---
+
+## Mở rộng (optional — bonus)
+
+### Demo edge case
+
+Ngoài happy path, demo thêm 1 tình huống AI xử lý chưa tốt — và show cách product handle:
+
+| Phần | Thời gian | Nội dung |
+|------|-----------|----------|
+| **Happy path** | 40 giây | Flow chính, AI đúng, user hài lòng |
+| **Edge case** | 20 giây | Input khó → AI không chắc hoặc sai → show UI handle: fallback, gợi ý thay thế, option escalate |
+
+Tại sao? Peer và GV ấn tượng hơn rất nhiều khi nhóm biết product mình fail ở đâu và đã design cho nó.
+
+### Before → After live comparison
+
+Demo cả flow cũ (không AI) và flow mới (có AI) cạnh nhau:
+
+1. **30 giây:** show flow cũ — user phải làm thủ công, mất bao lâu, bao nhiêu bước
+2. **30 giây:** show flow mới — cùng task, AI hỗ trợ, nhanh hơn / ít bước hơn
+
+So sánh trực tiếp tạo "aha moment" cho người xem.
+
+### Hỏi peer thử ngay
+
+Mời 1 peer ngồi thử demo ngay tại chỗ (thay vì chỉ nhìn nhóm demo):
+
+- Đưa laptop/điện thoại cho peer
+- Nói: "thử nhập triệu chứng của bạn xem AI gợi ý gì"
+- Quan sát phản ứng — peer tự trải nghiệm ấn tượng hơn peer nghe kể
+
+### Câu hỏi mở rộng
+
+- Nếu demo crash giữa chừng, câu nói nào sẽ cứu tình huống? (Plan B nên chuẩn bị sẵn lời nói)
+- Demo 2 phút chỉ show được 1 flow — nếu có 5 phút, sẽ show thêm gì?
+- Peer hỏi "tại sao không dùng ChatGPT/Gemini trực tiếp?" — trả lời thế nào?
