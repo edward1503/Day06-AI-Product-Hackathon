@@ -12,7 +12,7 @@
 - [x] Session 1: Fix data pipeline (ToC keys, transcript parser, model name, ThinkingConfig)
 - [x] Session 2: Deploy lên Railway (Procfile, requirements.txt, .gitignore, PORT env var)
 - [x] Session 2.5: Video embed (YouTube iframe + Google Drive iframe + timestamp slider thủ công)
-- [ ] Session 3: Cloud DB — Neon PostgreSQL (thay SQLite để data persist qua redeploy)
+- [x] Session 3: Cloud DB — Neon PostgreSQL (code done, chờ set DATABASE_URL trên Railway)
 - [ ] Session 4: Clerk auth (Google login)
 - [ ] Session 5: Google Drive video (thay YouTube bằng video từ Drive nếu cần)
 
@@ -56,11 +56,14 @@
 ### Session 2.5 — Video embed
 - `src/api/static/index.html` — YouTube/Drive iframe, timestamp slider + input thủ công, dual video mode (local/drive/youtube), captureFrame guard
 
+### Session 3 — Cloud DB (Neon PostgreSQL)
+- `src/models/store.py` — DATABASE_URL env var, postgres:// → postgresql:// fix, conditional connect_args
+
 ### Plan files
 - `plans/MEMORY.md` — file này
 - `plans/01-fix-data-pipeline.md` ✅
 - `plans/02-hosting-railway.md`, `plans/02-hosting-railway-guide.md` ✅
-- `plans/03-cloud-db-neon.md` ⏳
+- `plans/03-cloud-db-neon.md` ✅ (code done, chờ config Neon)
 - `plans/04-clerk-auth.md` ⏳
 - `plans/05-google-drive-video.md` ⏳
 
@@ -79,6 +82,6 @@ LECTURE_1_DRIVE_ID=<chưa set — optional, YouTube đang dùng thay>
 - Sau khi sửa code, chỉ cần `git push` → Railway tự redeploy
 
 ## Việc cần làm session tới
-1. **Push code mới** để Railway có YouTube embed
-2. **Session 3**: Setup Neon PostgreSQL → set `DATABASE_URL` trên Railway
+1. **Push code mới** để Railway có YouTube embed + Neon support
+2. **Cấu hình Neon**: Tạo DB trên neon.tech → set `DATABASE_URL` trên Railway (xem `plans/03-cloud-db-neon.md`)
 3. **Session 4**: Clerk auth (tạo app trên clerk.com → lấy keys → code login flow)

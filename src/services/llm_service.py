@@ -63,23 +63,51 @@ QUY TẮC:
         except Exception:
             pass  # Skip image if decode fails
 
-    # 5. Stream from Gemini
+    # 5. Stream from Gemini (with retry for 503 UNAVAILABLE)
+    import time
     client = genai.Client(api_key=GEMINI_API_KEY)
     full_answer = ""
+    MAX_RETRIES = 3
     
     try:
         gen_config_kwargs = {"system_instruction": system_instruction}
         if "thinking" in DEFAULT_MODEL or "flash-exp" in DEFAULT_MODEL:
             gen_config_kwargs["thinking_config"] = types.ThinkingConfig(include_thoughts=True)
 
-        stream = client.models.generate_content_stream(
-            model=DEFAULT_MODEL,
-            config=types.GenerateContentConfig(**gen_config_kwargs),
-            contents=content_list
-        )
+        stream = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                stream = client.models.generate_content_stream(
+                    model=DEFAULT_MODEL,
+                    config=types.GenerateContentConfig(**gen_config_kwargs),
+                    contents=content_list
+                )
+                break  # Success — exit retry loop
+            except Exception as retry_err:
+                if "503" in str(retry_err) and attempt < MAX_RETRIES - 1:
+                    wait = 2 ** (attempt + 1)  # 2s, 4s, 8s
+                    qa_logger.warning(f"Gemini 503, retrying in {wait}s (attempt {attempt+1}/{MAX_RETRIES})...")
+                    time.sleep(wait)
+                else:
+                    raise  # Re-raise if not 503 or last attempt
+
+        if stream is None:
+            raise RuntimeError("Failed to get stream from Gemini after retries")
         
         for chunk in stream:
-            text = chunk.text or ""
+            # Safely extract text — chunk.text can raise on empty parts
+            try:
+                text = chunk.text or ""
+            except (ValueError, AttributeError, IndexError):
+                # Some chunks have candidates but empty parts (metadata-only)
+                text = ""
+            
+            if not text and hasattr(chunk, 'candidates') and chunk.candidates:
+                # Fallback: manually extract text from parts
+                for part in (chunk.candidates[0].content.parts or []):
+                    if hasattr(part, 'text') and part.text:
+                        text += part.text
+            
             if text:
                 full_answer += text
                 yield json.dumps({"a": text}) + "\n"
@@ -106,7 +134,9 @@ QUY TẮC:
         }, ensure_ascii=False))
 
     except Exception as e:
-        qa_logger.error(f"Error: {e}")
-        yield json.dumps({"e": str(e)}) + "\n"
+        import traceback
+        error_detail = f"{type(e).__name__}: {e}"
+        qa_logger.error(f"Error: {error_detail}\n{traceback.format_exc()}")
+        yield json.dumps({"e": error_detail}) + "\n"
     finally:
         db.close()
