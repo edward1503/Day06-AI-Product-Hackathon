@@ -71,37 +71,68 @@ def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, 
 
     contents.append(types.Content(role='user', parts=current_parts))
 
-    # 6. Stream from Gemini
+    # 6. Stream from Gemini (with retry for 503 UNAVAILABLE)
+    import time
+    import traceback
     client = genai.Client(api_key=GEMINI_API_KEY)
     full_answer = ""
+    MAX_RETRIES = 3
     
     print(f"[{datetime.now().strftime('%H:%M:%S')}] INFO: Sending request to Gemini ({DEFAULT_MODEL}) for lecture: {lecture_id}", flush=True)
     qa_logger.info(f"Sending request to Gemini ({DEFAULT_MODEL}) for lecture: {lecture_id}")
     
     try:
-        stream = client.models.generate_content_stream(
-            model=DEFAULT_MODEL,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                thinking_config=types.ThinkingConfig(include_thoughts=True)
-            ),
-            contents=contents
-        )
+        # Build generation config — only enable thinking for models that support it
+        gen_config_kwargs = {"system_instruction": system_instruction}
+        if "thinking" in DEFAULT_MODEL or "flash-exp" in DEFAULT_MODEL:
+            gen_config_kwargs["thinking_config"] = types.ThinkingConfig(include_thoughts=True)
+
+        # Retry loop with exponential backoff
+        stream = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                stream = client.models.generate_content_stream(
+                    model=DEFAULT_MODEL,
+                    config=types.GenerateContentConfig(**gen_config_kwargs),
+                    contents=contents
+                )
+                break  # Success — exit retry loop
+            except Exception as retry_err:
+                if "503" in str(retry_err) and attempt < MAX_RETRIES - 1:
+                    wait = 2 ** (attempt + 1)  # 2s, 4s
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] WARN: Gemini 503, retrying in {wait}s (attempt {attempt+1}/{MAX_RETRIES})...", flush=True)
+                    qa_logger.warning(f"Gemini 503, retrying in {wait}s (attempt {attempt+1}/{MAX_RETRIES})...")
+                    time.sleep(wait)
+                else:
+                    raise  # Re-raise if not 503 or last attempt
+
+        if stream is None:
+            raise RuntimeError("Failed to get stream from Gemini after retries")
         
         is_first_chunk = True
         for chunk in stream:
             if is_first_chunk:
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] INFO: First chunk received from Gemini. Streaming started.", flush=True)
                 is_first_chunk = False
+            
+            # Safely extract text — chunk.text can raise on empty parts
+            try:
+                text = chunk.text or ""
+            except (ValueError, AttributeError, IndexError):
+                text = ""
+            
+            if not text and hasattr(chunk, 'candidates') and chunk.candidates:
+                for part in (chunk.candidates[0].content.parts or []):
+                    if hasattr(part, 'text') and part.text:
+                        text += part.text
                 
-            text = chunk.text or ""
             if text:
                 full_answer += text
                 yield text
 
         print(f"[{datetime.now().strftime('%H:%M:%S')}] INFO: Gemini stream completed successfully. Total length: {len(full_answer)} chars.", flush=True)
 
-        # 6. Save to DB
+        # 7. Save to DB
         history = QAHistory(
             lecture_id=lecture_id,
             question=user_question,
@@ -113,7 +144,7 @@ def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, 
         db.add(history)
         db.commit()
 
-        # 7. File Log
+        # 8. File Log
         qa_logger.info(json.dumps({
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "lecture": lecture_id,
@@ -123,8 +154,9 @@ def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, 
         }, ensure_ascii=False))
 
     except Exception as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Gemini API call failed: {str(e)}")
-        qa_logger.error(f"Error streaming from Gemini: {e}")
-        yield f"Error: {str(e)}"
+        error_detail = f"{type(e).__name__}: {e}"
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Gemini API call failed: {error_detail}", flush=True)
+        qa_logger.error(f"Error: {error_detail}\n{traceback.format_exc()}")
+        yield f"Error: {error_detail}"
     finally:
         db.close()

@@ -4,9 +4,16 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 
-# Database path
+# Database configuration: use DATABASE_URL env var (Neon PostgreSQL) or fall back to local SQLite
 DB_PATH = os.path.join(os.path.dirname(__file__), "../../app.db")
-engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
+
+# Neon/Heroku/Railway use postgres:// but SQLAlchemy requires postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -17,6 +24,8 @@ class Lecture(Base):
     title = Column(String, index=True)
     description = Column(Text, nullable=True)
     video_url = Column(String, nullable=True)
+    youtube_id = Column(String, nullable=True)
+    drive_file_id = Column(String, nullable=True)
     duration = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -46,17 +55,31 @@ class TranscriptLine(Base):
     
     lecture = relationship("Lecture", back_populates="transcript_lines")
 
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    password_hash = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    qa_history = relationship("QAHistory", back_populates="user", cascade="all, delete-orphan")
+
 class QAHistory(Base):
     __tablename__ = "qa_history"
     
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     lecture_id = Column(String, ForeignKey("lectures.id"))
     question = Column(Text)
     answer = Column(Text)
-    thoughts = Column(Text, nullable=True) # Quá trình suy nghĩ sâu
+    thoughts = Column(Text, nullable=True)
     current_timestamp = Column(Float)
-    image_base64 = Column(Text, nullable=True) # Ảnh đã chụp lúc đó
+    image_base64 = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="qa_history")
 
 def init_db():
     Base.metadata.create_all(bind=engine)
