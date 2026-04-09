@@ -1,22 +1,31 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from src.models.store import get_db, Lecture, Chapter, TranscriptLine, QAHistory
 from src.services.llm_service import get_context_and_stream_gemini
+import os
+import glob
 
 app = FastAPI(title="Lecture Q&A Platform API")
 
 # Mount data to serve videos
-app.mount("/data", StaticFiles(directory="data"), name="data")
-# Mount static files for UI
-app.mount("/static", StaticFiles(directory="src/api/static"), name="static")
+try:
+    app.mount("/data", StaticFiles(directory="data", follow_symlink=True), name="data")
+except TypeError:
+    # Older starlette version fallback
+    app.mount("/data", StaticFiles(directory="data"), name="data")
 
-@app.get("/")
-def read_root():
-    from fastapi.responses import FileResponse
-    return FileResponse("src/api/static/index.html")
+@app.get("/api/lectures/{lecture_id}/slides")
+def get_slides(lecture_id: str):
+    base = lecture_id.replace("-", "_")
+    files = glob.glob(f"data/cs231n/slides/{base}*.pdf")
+    return [{"name": os.path.basename(f), "url": f"/{f}"} for f in files]
+
+# Only mount frontend static files if dist exists (so local dev doesn't crash before build)
+if os.path.exists("frontend/dist/assets"):
+    app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
 
 class AskRequest(BaseModel):
     lecture_id: str
@@ -56,6 +65,13 @@ def ask_question(req: AskRequest, db: Session = Depends(get_db)):
 @app.get("/api/history")
 def get_history(db: Session = Depends(get_db)):
     return db.query(QAHistory).order_by(QAHistory.created_at.desc()).limit(50).all()
+
+# Catch-all route for SPA (React)
+@app.get("/{full_path:path}")
+def serve_spa(full_path: str):
+    if os.path.exists("frontend/dist/index.html"):
+        return FileResponse("frontend/dist/index.html")
+    return {"message": "Frontend not built yet. Run `npm run build` in frontend directory."}
 
 if __name__ == "__main__":
     import uvicorn
