@@ -6,7 +6,7 @@ from datetime import datetime
 from google import genai
 from google.genai import types
 from src.config import GEMINI_API_KEY, DEFAULT_MODEL
-from src.models.store import SessionLocal, Lecture, Chapter, TranscriptLine, QAHistory
+from src.models.store import SessionLocal, Chapter, TranscriptLine, QAHistory
 
 # Configure File Logging
 LOG_DIR = "logs"
@@ -68,12 +68,13 @@ QUY TẮC:
     full_answer = ""
     
     try:
+        gen_config_kwargs = {"system_instruction": system_instruction}
+        if "thinking" in DEFAULT_MODEL or "flash-exp" in DEFAULT_MODEL:
+            gen_config_kwargs["thinking_config"] = types.ThinkingConfig(include_thoughts=True)
+
         stream = client.models.generate_content_stream(
             model=DEFAULT_MODEL,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                thinking_config=types.ThinkingConfig(include_thoughts=True)
-            ),
+            config=types.GenerateContentConfig(**gen_config_kwargs),
             contents=content_list
         )
         

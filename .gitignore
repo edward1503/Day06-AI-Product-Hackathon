@@ -1,2 +1,10 @@
 .env
-data
+app.db
+logs/
+__pycache__/
+*.pyc
+.venv/
+
+# Large binary files — keep transcripts and ToC in git
+data/**/*.mp4
+data/**/*.pdf

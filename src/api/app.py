@@ -1,12 +1,18 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from src.models.store import get_db, Lecture, Chapter, TranscriptLine, QAHistory
+from src.models.store import get_db, init_db, Lecture, Chapter, QAHistory
 from src.services.llm_service import get_context_and_stream_gemini
 
-app = FastAPI(title="Lecture Q&A Platform API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+app = FastAPI(title="Lecture Q&A Platform API", lifespan=lifespan)
 
 # Mount data to serve videos
 app.mount("/data", StaticFiles(directory="data"), name="data")
@@ -58,5 +64,7 @@ def get_history(db: Session = Depends(get_db)):
     return db.query(QAHistory).order_by(QAHistory.created_at.desc()).limit(50).all()
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

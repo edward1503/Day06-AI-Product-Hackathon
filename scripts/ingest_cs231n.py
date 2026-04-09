@@ -1,11 +1,24 @@
 import os
 import glob
-import re
 from src.services.ingestion import ingest_lecture
 
 def find_file(directory, pattern):
     files = glob.glob(os.path.join(directory, pattern))
     return files[0] if files else None
+
+def extract_youtube_id(transcript_path):
+    """Extract YouTube Video ID from transcript file header."""
+    if not transcript_path or not os.path.exists(transcript_path):
+        return None
+    with open(transcript_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith('Video ID:'):
+                return line.split(':', 1)[1].strip()
+            # Stop after header block
+            if line.startswith('==='):
+                break
+    return None
 
 def main():
     base_dir = "data/cs231n"
@@ -67,12 +80,17 @@ def main():
         print(f"  Transcript: {transcript_path}")
         print(f"  Video: {video_path}")
         
+        youtube_id = extract_youtube_id(transcript_path)
+        if youtube_id:
+            print(f"  YouTube ID: {youtube_id}")
+
         try:
             ingest_lecture(
                 lecture_id=lecture_id,
                 toc_path=toc_path,
                 transcript_paths=transcript_paths,
-                video_filename=video_rel_path
+                video_filename=video_rel_path,
+                youtube_id=youtube_id
             )
         except Exception as e:
             print(f"FAILED to ingest {lecture_id}: {e}")
