@@ -69,11 +69,18 @@ def get_subtitles(lecture_id: str):
 if os.path.exists("frontend/dist/assets"):
     app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
 
+from typing import List, Optional
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
 class AskRequest(BaseModel):
     lecture_id: str
     current_timestamp: float
     question: str
-    image_base64: str = None
+    image_base64: Optional[str] = None
+    chat_history: List[ChatMessage] = []
 
 @app.get("/api/lectures")
 def list_lectures(db: Session = Depends(get_db)):
@@ -88,20 +95,26 @@ def get_toc(lecture_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/lectures/ask")
 def ask_question(req: AskRequest, db: Session = Depends(get_db)):
+    from datetime import datetime
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] >>> POST /api/lectures/ask received | lecture={req.lecture_id} | q={req.question[:50]} | has_image={req.image_base64 is not None} | history_len={len(req.chat_history)}", flush=True)
     try:
         # Check if lecture exists
         lecture = db.query(Lecture).filter(Lecture.id == req.lecture_id).first()
         if not lecture:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Lecture {req.lecture_id} not found in DB", flush=True)
             raise HTTPException(status_code=404, detail="Lecture not found")
             
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] INFO: Lecture found. Creating Gemini stream...", flush=True)
         generator = get_context_and_stream_gemini(
             req.lecture_id, 
             req.current_timestamp, 
             req.question,
-            image_base64=req.image_base64
+            req.image_base64,
+            req.chat_history
         )
         return StreamingResponse(generator, media_type="text/event-stream")
     except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR in ask_question: {e}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/history")

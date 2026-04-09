@@ -16,10 +16,10 @@ import {
   Lightbulb,
   ChevronLeft,
   ChevronRight,
-  PanelLeftClose,
   PanelRightClose,
   Minimize2,
-  Maximize2
+  Maximize2,
+  RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -41,6 +41,7 @@ interface ChatMessage {
   id: number;
   role: 'ai' | 'user';
   content: string;
+  isError?: boolean;
 }
 
 interface Chapter {
@@ -192,17 +193,43 @@ const AIChatbot = ({
   isCollapsed,
   onToggle,
   lectureId,
-  getCurrentTimestamp
+  getCurrentTimestamp,
+  videoRef
 }: {
   isCollapsed: boolean;
   onToggle: () => void;
   lectureId?: string;
   getCurrentTimestamp: () => number;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const captureFrame = (): string | null => {
+    const video = videoRef.current;
+    if (!video) return null;
+
+    try {
+      if (!canvasRef.current) {
+        canvasRef.current = document.createElement('canvas');
+      }
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Return base64 without prefix data:image/jpeg;base64,
+      return canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+    } catch (e) {
+      console.error("Frame capture failed:", e);
+      return null;
+    }
+  };
 
   // Auto scroll
   useEffect(() => {
@@ -214,22 +241,39 @@ const AIChatbot = ({
     setMessages([{ id: 1, role: 'ai', content: "Hello! I'm Learning Hub AI. Ask me anything about this video, and I'll use the lecture context to explain it." }]);
   }, [lectureId]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isThinking || !lectureId) return;
+  const handleSend = async (retryContent?: string) => {
+    const questionToAsk = retryContent || input;
+    if (!questionToAsk.trim() || isThinking || !lectureId) return;
 
-    const userMsg: ChatMessage = { id: Date.now(), role: 'user', content: input };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
+    if (retryContent) {
+      // Remove the error message from history
+      setMessages(prev => prev.filter(m => !m.isError));
+    } else {
+      const userMsg: ChatMessage = { id: Date.now(), role: 'user', content: input };
+      setMessages(prev => [...prev, userMsg]);
+      setInput('');
+    }
+    
     setIsThinking(true);
 
     try {
+      const imageBase64 = captureFrame();
+      const historyPayload = messages
+        .filter(m => m.id !== 1 && !m.isError)
+        .map(m => ({ role: m.role, content: m.content }))
+        .slice(-6);
+
+      console.log("Sending Request to AI...", { lecture_id: lectureId, qs: input, history_len: historyPayload.length });
+
       const response = await fetch('/api/lectures/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lecture_id: lectureId,
           current_timestamp: getCurrentTimestamp(),
-          question: input,
+          question: questionToAsk,
+          image_base64: imageBase64,
+          chat_history: historyPayload
         }),
       });
 
@@ -240,30 +284,32 @@ const AIChatbot = ({
       const decoder = new TextDecoder();
       const aiMessageId = Date.now() + 1;
       
-      // Keep thinking true until we're ready to start streaming into the message
-      setMessages(prev => [...prev, { id: aiMessageId, role: 'ai', content: "" }]);
-      
-      let done = false;
+      // We'll wait for the first chunk or handle it carefully below
+      let aiResponseContent = "";
       let isFirstChunk = true;
+      let done = false;
       
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
         if (value) {
+          const chunk = decoder.decode(value, { stream: true });
           if (isFirstChunk) {
             setIsThinking(false);
             isFirstChunk = false;
+            setMessages(prev => [...prev, { id: aiMessageId, role: 'ai', content: chunk }]);
+          } else {
+            setMessages(prev => prev.map(m => 
+              m.id === aiMessageId ? { ...m, content: m.content + chunk } : m
+            ));
           }
-          const chunk = decoder.decode(value, { stream: true });
-          setMessages(prev => prev.map(m => 
-            m.id === aiMessageId ? { ...m, content: m.content + chunk } : m
-          ));
+          aiResponseContent += chunk;
         }
       }
     } catch (error) {
-      console.error(error);
+      console.error("HandleSend Error Catch:", error);
       setIsThinking(false);
-      setMessages(prev => [...prev, { id: Date.now(), role: 'ai', content: "Sorry, I ran into an error connecting to the API." }]);
+      setMessages(prev => [...prev, { id: Date.now(), role: 'ai', content: "Sorry, I ran into an error connecting to the API.", isError: true }]);
     }
   };
 
@@ -297,7 +343,7 @@ const AIChatbot = ({
 
             {/* Chat Messages */}
             <div className="p-4 space-y-4 max-h-[280px] overflow-y-auto scrollbar-thin scrollbar-thumb-outline-variant/30 scrollbar-track-transparent">
-              {messages.map((msg) => (
+              {messages.filter(m => m.content).map((msg) => (
                 <motion.div
                   key={msg.id}
                   initial={{ opacity: 0, x: msg.role === 'ai' ? -10 : 10 }}
@@ -316,19 +362,36 @@ const AIChatbot = ({
                     {msg.role === 'user' ? (
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     ) : (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={{
-                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                          ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
-                          code: ({ children }) => <code className="bg-surface-container-highest px-1 rounded font-mono text-xs">{children}</code>,
-                          pre: ({ children }) => <pre className="bg-surface-container-highest p-2 rounded-lg my-2 overflow-x-auto font-mono text-xs border border-outline-variant/10">{children}</pre>
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
+                      <>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                          components={{
+                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                            ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                            code: ({ children }) => <code className="bg-surface-container-highest px-1 rounded font-mono text-xs">{children}</code>,
+                            pre: ({ children }) => <pre className="bg-surface-container-highest p-2 rounded-lg my-2 overflow-x-auto font-mono text-xs border border-outline-variant/10">{children}</pre>
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                        {msg.isError && (
+                          <div className="mt-3">
+                            <button
+                              onClick={() => {
+                                const msgIndex = messages.findIndex(m => m.id === msg.id);
+                                const lastUserMsg = messages.slice(0, msgIndex).reverse().find(m => m.role === 'user');
+                                handleSend(lastUserMsg?.content);
+                              }}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-semibold hover:bg-primary/20 transition-colors"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Retry
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </motion.div>
@@ -647,6 +710,7 @@ export default function Player({ onNavigate }: { onNavigate: (view: string) => v
           onToggle={() => setIsChatCollapsed(!isChatCollapsed)}
           lectureId={activeLesson?.originalId}
           getCurrentTimestamp={getCurrentTimestamp}
+          videoRef={videoRef}
         />
         <RightSidebar
           isCollapsed={isRightSidebarCollapsed}
