@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-export default function Landing({ onNavigate }: { onNavigate: (view: string) => void }) {
+export default function Landing({ onNavigate }: { onNavigate: (view: 'login' | 'landing' | 'player' | 'admin') => void }) {
   const [lectures, setLectures] = useState<any[]>([]);
 
   useEffect(() => {
@@ -48,7 +48,13 @@ export default function Landing({ onNavigate }: { onNavigate: (view: string) => 
         </div>
         <div className="flex items-center gap-5">
           <button className="text-on-surface-variant hover:text-on-surface transition-colors"><Bell className="w-5 h-5" /></button>
-          <button className="text-on-surface-variant hover:text-on-surface transition-colors"><Settings className="w-5 h-5" /></button>
+          <button 
+            onClick={() => onNavigate('admin')}
+            title="Admin Dashboard"
+            className="text-on-surface-variant hover:text-on-surface transition-colors"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
           <div className="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden ring-1 ring-outline-variant/15 cursor-pointer">
             <img 
               alt="User Avatar" 

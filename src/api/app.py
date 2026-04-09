@@ -146,6 +146,46 @@ def submit_signal(req: SignalRequest, db: Session = Depends(get_db)):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] SIGNAL: history_id={req.history_id} → {req.status}", flush=True)
     return {"ok": True, "history_id": req.history_id, "status": req.status}
 
+@app.get("/api/admin/stats")
+def get_admin_stats(db: Session = Depends(get_db)):
+    """Return stats for the admin dashboard"""
+    records = db.query(QAHistory).all()
+    
+    total = len(records)
+    if total == 0:
+        return {"understood_rate": 0, "hallucination_rate": 0, "latency_p95": 0, "corrections": []}
+
+    # Understood rate (understood / (understood + reported))
+    resolved_records = [r for r in records if r.status in ("understood", "reported")]
+    understood_count = len([r for r in resolved_records if r.status == "understood"])
+    understood_rate = (understood_count / len(resolved_records) * 100) if resolved_records else 0
+
+    # Hallucination rate (confidence < 0.8 OR reported)
+    hallucination_count = len([r for r in records if (r.confidence_score is not None and r.confidence_score < 0.8) or r.status == "reported"])
+    hallucination_rate = (hallucination_count / total) * 100
+
+    # P95 Latency
+    latencies = sorted([r.latency_ms for r in records if r.latency_ms is not None])
+    p95_latency = latencies[int(len(latencies) * 0.95)] if latencies else 0
+
+    # Recent Corrections
+    corrections = db.query(QAHistory).filter(QAHistory.status == "reported").order_by(QAHistory.created_at.desc()).limit(20).all()
+    
+    return {
+        "understood_rate": round(understood_rate, 1),
+        "hallucination_rate": round(hallucination_rate, 1),
+        "latency_p95": round(p95_latency, 1),
+        "corrections": [{
+            "id": c.id,
+            "question": c.question,
+            "answer": c.answer,
+            "correction_exact": c.correction_exact,
+            "confidence_score": c.confidence_score,
+            "latency_ms": c.latency_ms,
+            "created_at": c.created_at.isoformat()
+        } for c in corrections]
+    }
+
 @app.get("/api/history")
 def get_history(db: Session = Depends(get_db)):
     return db.query(QAHistory).order_by(QAHistory.created_at.desc()).limit(50).all()

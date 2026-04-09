@@ -59,7 +59,7 @@ interface Chapter {
 
 // --- Components ---
 
-const Header = ({ onNavigate }: { onNavigate: (view: string) => void }) => (
+const Header = ({ onNavigate }: { onNavigate: (view: 'login' | 'landing' | 'player' | 'admin') => void }) => (
   <header className="h-16 bg-surface-container-low shrink-0 flex items-center justify-between px-6 z-20 border-b border-outline-variant/10">
     <button
       onClick={() => onNavigate('landing')}
@@ -851,7 +851,7 @@ const RightSidebar = ({
   );
 };
 
-export default function Player({ onNavigate }: { onNavigate: (view: string) => void }) {
+export default function Player({ onNavigate }: { onNavigate: (view: 'login' | 'landing' | 'player' | 'admin') => void }) {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
   

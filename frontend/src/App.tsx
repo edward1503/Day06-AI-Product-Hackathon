@@ -1,9 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Landing from './components/Landing';
 import Player from './components/Player';
+import AdminDashboard from './components/AdminDashboard';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'login' | 'landing' | 'player'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'landing' | 'player' | 'admin'>(() => {
+    const path = window.location.pathname;
+    if (path === '/dashboard') return 'admin';
+    if (path === '/player') return 'player';
+    if (path === '/home') return 'landing';
+    return 'login';
+  });
+
+  // Sync URL when state changes
+  useEffect(() => {
+    let path = '/';
+    if (currentView === 'admin') path = '/dashboard';
+    else if (currentView === 'player') path = '/player';
+    else if (currentView === 'landing') path = '/home';
+    
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, '', path);
+    }
+  }, [currentView]);
+
+  // Handle browser back button
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (path === '/dashboard') setCurrentView('admin');
+      else if (path === '/player') setCurrentView('player');
+      else if (path === '/home') setCurrentView('landing');
+      else setCurrentView('login');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   if (currentView === 'login') {
     return (
@@ -32,6 +64,7 @@ export default function App() {
     <>
       {currentView === 'landing' && <Landing onNavigate={setCurrentView} />}
       {currentView === 'player' && <Player onNavigate={setCurrentView} />}
+      {currentView === 'admin' && <AdminDashboard onNavigate={setCurrentView} />}
     </>
   );
 }
