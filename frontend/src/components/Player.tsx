@@ -22,6 +22,10 @@ import {
   Maximize2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 // --- Types ---
 interface Lesson {
@@ -299,11 +303,27 @@ const AIChatbot = ({
                       <Bot className="w-3.5 h-3.5 text-on-primary" />
                     </div>
                   )}
-                  <div className={`p-3 rounded-xl text-sm font-body leading-relaxed whitespace-pre-wrap ${msg.role === 'ai'
-                      ? 'bg-surface-container-lowest rounded-tl-sm border border-outline-variant/10 text-on-surface/90'
+                  <div className={`p-3 rounded-xl text-sm font-body leading-relaxed max-w-[90%] overflow-x-auto ${msg.role === 'ai'
+                      ? 'bg-surface-container-lowest rounded-tl-sm border border-outline-variant/10 text-on-surface/90 chat-prose'
                       : 'bg-primary/10 border border-primary/20 rounded-tr-sm text-on-surface'
                     }`}>
-                    {msg.content}
+                    {msg.role === 'user' ? (
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    ) : (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                          code: ({ children }) => <code className="bg-surface-container-highest px-1 rounded font-mono text-xs">{children}</code>,
+                          pre: ({ children }) => <pre className="bg-surface-container-highest p-2 rounded-lg my-2 overflow-x-auto font-mono text-xs border border-outline-variant/10">{children}</pre>
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
                   </div>
                 </motion.div>
               ))}
