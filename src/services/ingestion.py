@@ -50,15 +50,21 @@ def ingest_lecture(lecture_id, toc_path, transcript_paths, video_filename=None):
     lecture = db.query(Lecture).filter(Lecture.id == lecture_id).first()
     video_path = os.path.join("data", video_filename) if video_filename else None
     
+    # Get and clean title
+    raw_title = toc_data.get("lecture_title", lecture_id)
+    # Extract "Lecture X: Content" from "Stanford ... | Lecture X: Content"
+    match = re.search(r"(Lecture\s+\d+[:：]\s*.*)$", raw_title, re.IGNORECASE)
+    clean_title = match.group(1) if match else raw_title
+
     if not lecture:
         lecture = Lecture(
             id=lecture_id, 
-            title=toc_data.get("lecture_title", lecture_id),
+            title=clean_title,
             video_url=video_path
         )
         db.add(lecture)
     else:
-        lecture.title = toc_data.get("lecture_title", lecture_id)
+        lecture.title = clean_title
         lecture.video_url = video_path
     
     # Clear existing chapters/lines for re-ingestion

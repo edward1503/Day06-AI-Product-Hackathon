@@ -41,29 +41,42 @@ def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, 
         transcript_context += f"[{line.start_time:.0f}s] {line.content}\n"
         
     # 3. System Prompt
-    system_instruction = """Bạn là một Gia sư trực tuyến (AI Tutor) thông minh.
-Nhiệm vụ: Giải đáp thắc mắc dựa trên bài giảng (Transcript + Hình ảnh).
+    system_instruction = """Bạn là một Gia sư trực tuyến (Learning Hub AI) thông minh.
+Nhiệm vụ: Giải đáp thắc mắc dựa trên bài giảng (Transcript + Hình ảnh + Lịch sử trò chuyện).
 
 QUY TẮC:
 1. Quan sát hình ảnh đính kèm (nếu có).
-2. Câu hỏi trong Window/Hình ảnh: Trả lời chi tiết.
-3. Nội dung ĐÃ HỌC: Tóm tắt lại.
-4. Nội dung CHƯA HỌC: Nhắc user đợi.
-5. LẠC ĐỀ: Nhắc tập trung bài giảng.
+2. Dữ liệu ngữ cảnh (ToC + Transcript) là tài liệu tham khảo chính.
+3. Luôn duy trì tính nhất quán với câu trả lời trước đó trong lịch sử trò chuyện.
+4. Trả lời chi tiết, chuyên nghiệp.
 """
 
-    user_prompt = f"Bài học:\n{toc_context}\n\nHiện tại (giây {current_timestamp}):\n{transcript_context}\n\nCâu hỏi: \"{user_question}\""
+    context_block = f"--- NGỮ CẢNH BÀI GIẢNG ---\n{toc_context}\n\nHiện tại (giây {current_timestamp}):\n{transcript_context}\n------------------------"
 
-    # 4. Prepare Content
-    content_list = [user_prompt]
+    # 4. Get History (Last 5 pairs)
+    history_entries = db.query(QAHistory).filter(
+        QAHistory.lecture_id == lecture_id
+    ).order_by(QAHistory.created_at.desc()).limit(5).all()
+    
+    # Interleave history for Gemini (roles: 'user' and 'model')
+    contents = []
+    for h in reversed(history_entries):
+        contents.append(types.Content(role='user', parts=[types.Part.from_text(text=h.question)]))
+        contents.append(types.Content(role='model', parts=[types.Part.from_text(text=h.answer)]))
+        
+    # 5. Prepare Current Message
+    current_parts = [types.Part.from_text(text=context_block), types.Part.from_text(text=user_question)]
+    
     if image_base64:
         try:
             image_data = base64.b64decode(image_base64)
-            content_list.append(types.Part.from_bytes(data=image_data, mime_type="image/jpeg"))
+            current_parts.append(types.Part.from_bytes(data=image_data, mime_type="image/jpeg"))
         except Exception:
             pass  # Skip image if decode fails
 
-    # 5. Stream from Gemini
+    contents.append(types.Content(role='user', parts=current_parts))
+
+    # 6. Stream from Gemini
     client = genai.Client(api_key=GEMINI_API_KEY)
     full_answer = ""
     
@@ -74,14 +87,14 @@ QUY TẮC:
                 system_instruction=system_instruction,
                 thinking_config=types.ThinkingConfig(include_thoughts=True)
             ),
-            contents=content_list
+            contents=contents
         )
         
         for chunk in stream:
             text = chunk.text or ""
             if text:
                 full_answer += text
-                yield json.dumps({"a": text}) + "\n"
+                yield text
 
         # 6. Save to DB
         history = QAHistory(
@@ -106,6 +119,6 @@ QUY TẮC:
 
     except Exception as e:
         qa_logger.error(f"Error: {e}")
-        yield json.dumps({"e": str(e)}) + "\n"
+        yield f"Error: {str(e)}"
     finally:
         db.close()

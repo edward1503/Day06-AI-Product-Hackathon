@@ -37,8 +37,8 @@ def main():
     # 0. Clean DB first
     clear_database()
     
-    # Loop through lecture numbers 1 to 2
-    for n in range(1, 3):
+    # Loop through all 18 lectures
+    for n in range(1, 19):
         lecture_id = f"lecture-{n}"
         
         # 1. Find ToC

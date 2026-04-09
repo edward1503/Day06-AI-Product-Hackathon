@@ -240,14 +240,20 @@ const AIChatbot = ({
       const decoder = new TextDecoder();
       const aiMessageId = Date.now() + 1;
       
+      // Keep thinking true until we're ready to start streaming into the message
       setMessages(prev => [...prev, { id: aiMessageId, role: 'ai', content: "" }]);
-      setIsThinking(false);
-
+      
       let done = false;
+      let isFirstChunk = true;
+      
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
         if (value) {
+          if (isFirstChunk) {
+            setIsThinking(false);
+            isFirstChunk = false;
+          }
           const chunk = decoder.decode(value, { stream: true });
           setMessages(prev => prev.map(m => 
             m.id === aiMessageId ? { ...m, content: m.content + chunk } : m
