@@ -1,0 +1,10 @@
+streamlit
+requests
+httpx
+google-genai
+sqlalchemy
+python-dotenv
+fastapi
+pydantic
+anthropic
+uvicorn
