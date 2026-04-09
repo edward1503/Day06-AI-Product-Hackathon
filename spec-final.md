@@ -136,3 +136,4 @@ Sản phẩm giải quyết vấn đề gián đoạn luồng học tập của 
 - Đức: User stories 4 paths (tài liệu này)
 - Phúc: Eval metrics & ROI
 - Hoàng: Prototype research & prompt engineering test
+- Luân: Canvas
