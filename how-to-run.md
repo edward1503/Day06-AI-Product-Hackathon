@@ -41,13 +41,28 @@ GEMINI_API_KEY=AIza...
 DEFAULT_MODEL=gemini-3-flash-preview
 ```
 
-### 3. nạp dữ liệu (Ingestion)
-Để nạp dữ liệu bài giảng CS231N vào hệ thống:
+### 3. Tạo cấu trúc thư mục data
+Do thư mục `data` đã được cấu hình trong `.gitignore`, máy khác sẽ không có các thư mục này. Bạn cần chạy lệnh sau để tạo sẵn cấu trúc thư mục trống chuẩn bị cho bước Ingestion:
+
+**Sử dụng Bash (Linux/macOS/Git Bash):**
+```bash
+mkdir -p data/cs224n data/cs231n/slides data/cs231n/ToC_Summary data/cs231n/transcripts data/cs231n/videos
+```
+
+**Sử dụng Python (đa nền tảng):**
+```bash
+python -c "import os; [os.makedirs(d, exist_ok=True) for d in ['data/cs224n', 'data/cs231n/slides', 'data/cs231n/ToC_Summary', 'data/cs231n/transcripts', 'data/cs231n/videos']]"
+```
+
+*Lưu ý: Sau khi tạo cấu trúc xong, bạn hãy chép thủ công các file Video, Transcript, và ToC vào đúng thư mục tương ứng.*
+
+### 4. Nạp dữ liệu (Ingestion)
+Để nạp dữ liệu bài giảng CS231N vào hệ thống (sau khi đã chép file vào thư mục data):
 ```bash
 PYTHONPATH=. uv run python scripts/ingest_cs231n.py
 ```
 
-### 4. Khởi chạy Backend
+### 5. Khởi chạy Backend
 ```bash
 PYTHONPATH=. uv run python src/api/app.py
 ```
