@@ -18,6 +18,22 @@ async def lifespan(app: FastAPI):
     os.makedirs("data", exist_ok=True)
     os.makedirs("logs", exist_ok=True)
     init_db()
+    
+    # Create default test user for demo
+    from src.models.store import SessionLocal
+    db = SessionLocal()
+    try:
+        if not db.query(User).filter(User.email == "test@test.com").first():
+            test_user = User(
+                email="test@test.com",
+                name="Test Demo",
+                password_hash=hash_password("test")
+            )
+            db.add(test_user)
+            db.commit()
+    finally:
+        db.close()
+        
     yield
 
 app = FastAPI(title="Lecture Q&A Platform API", lifespan=lifespan)
