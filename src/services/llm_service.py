@@ -96,6 +96,7 @@ def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, 
 
         # Retry loop with exponential backoff
         stream = None
+        retryable_codes = ["429", "500", "503", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]
         for attempt in range(MAX_RETRIES):
             try:
                 stream = client.models.generate_content_stream(
@@ -105,19 +106,25 @@ def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, 
                 )
                 break  # Success — exit retry loop
             except Exception as retry_err:
-                if "503" in str(retry_err) and attempt < MAX_RETRIES - 1:
+                err_str = str(retry_err)
+                is_retryable = any(code in err_str for code in retryable_codes)
+                if is_retryable and attempt < MAX_RETRIES - 1:
                     wait = 2 ** (attempt + 1)  # 2s, 4s
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] WARN: Gemini 503, retrying in {wait}s (attempt {attempt+1}/{MAX_RETRIES})...", flush=True)
-                    qa_logger.warning(f"Gemini 503, retrying in {wait}s (attempt {attempt+1}/{MAX_RETRIES})...")
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] WARN: Gemini error, retrying in {wait}s (attempt {attempt+1}/{MAX_RETRIES})...", flush=True)
+                    qa_logger.warning(f"Gemini retryable error, retrying in {wait}s (attempt {attempt+1}/{MAX_RETRIES}): {err_str[:100]}")
+                    # Yield retry status to frontend
+                    yield f"###RETRY###{attempt+1}/{MAX_RETRIES}###RETRY_END###"
                     time.sleep(wait)
                 else:
-                    raise  # Re-raise if not 503 or last attempt
+                    raise  # Re-raise if not retryable or last attempt
 
         if stream is None:
             raise RuntimeError("Failed to get stream from Gemini after retries")
         
         is_first_chunk = True
         latency_ms = None
+        pending_text = ""  # Buffer to catch ###META### split across chunks
+        
         for chunk in stream:
             if is_first_chunk:
                 latency_ms = (datetime.now() - request_start).total_seconds() * 1000
@@ -137,9 +144,29 @@ def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, 
                 
             if text:
                 full_answer += text
-                # Don't yield the ###META### block to the client
-                if "###META###" not in text:
-                    yield text
+                pending_text += text
+                
+                # If we see a partial META marker, buffer it
+                if "###META" in pending_text and "###END###" not in pending_text:
+                    continue  # Wait for the rest of the META block
+                
+                # If complete META block found, strip it
+                if "###META###" in pending_text and "###END###" in pending_text:
+                    # Strip the META block from what we yield
+                    clean_output = regex.sub(r'###META###.*?###END###', '', pending_text, flags=regex.DOTALL)
+                    if clean_output.strip():
+                        yield clean_output
+                    pending_text = ""
+                else:
+                    # No META marker, yield normally
+                    yield pending_text
+                    pending_text = ""
+
+        # Flush any remaining buffered text (shouldn't contain META at this point)
+        if pending_text:
+            clean_remaining = regex.sub(r'###META###.*?###END###', '', pending_text, flags=regex.DOTALL)
+            if clean_remaining.strip():
+                yield clean_remaining
 
         print(f"[{datetime.now().strftime('%H:%M:%S')}] INFO: Gemini stream completed. Total length: {len(full_answer)} chars.", flush=True)
 
@@ -167,24 +194,29 @@ def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, 
         })
         yield f"\n###FRONTMETA###{meta_payload}###FRONTMETA_END###"
 
-        # 8. Save to DB
-        history = QAHistory(
-            lecture_id=lecture_id,
-            question=user_question,
-            answer=clean_answer,
-            thoughts="",
-            current_timestamp=current_timestamp,
-            image_base64=image_base64[:500] if image_base64 else None,
-            confidence_score=confidence_score,
-            source_citation=source_citation,
-            latency_ms=latency_ms,
-            is_proactive=is_proactive,
-        )
-        db.add(history)
-        db.commit()
-        
-        # Yield history_id so frontend can use it for signals
-        yield f"\n###HISTORYID###{history.id}###HISTORYID_END###"
+        # 8. Save to DB (wrapped in try/except to not leak SQL errors to chat)
+        try:
+            history = QAHistory(
+                lecture_id=lecture_id,
+                question=user_question,
+                answer=clean_answer,
+                thoughts="",
+                current_timestamp=current_timestamp,
+                image_base64=image_base64[:500] if image_base64 else None,
+                confidence_score=confidence_score,
+                source_citation=source_citation,
+                latency_ms=latency_ms,
+                is_proactive=is_proactive,
+            )
+            db.add(history)
+            db.commit()
+            
+            # Yield history_id so frontend can use it for signals
+            yield f"\n###HISTORYID###{history.id}###HISTORYID_END###"
+        except Exception as db_err:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: DB save failed: {db_err}", flush=True)
+            qa_logger.error(f"DB save failed: {db_err}")
+            db.rollback()
 
         # 9. File Log
         qa_logger.info(json.dumps({

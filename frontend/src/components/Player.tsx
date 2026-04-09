@@ -47,6 +47,7 @@ interface ChatMessage {
   confidenceScore?: number;
   sourceCitation?: string;
   status?: 'pending' | 'understood' | 'reported';
+  latencyMs?: number;
 }
 
 interface Chapter {
@@ -210,10 +211,12 @@ const AIChatbot = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+  const [retryStatus, setRetryStatus] = useState<string | null>(null);
   const [reportingId, setReportingId] = useState<number | null>(null);
   const [correctionText, setCorrectionText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const requestStartRef = useRef<number>(0);
 
   const submitSignal = async (status: 'understood' | 'reported', historyId?: number, msgId?: number) => {
     if (!historyId) return;
@@ -268,7 +271,7 @@ const AIChatbot = ({
 
   // Reset chat on lecture change
   useEffect(() => {
-    setMessages([{ id: 1, role: 'ai', content: "Hello! I'm Learning Hub AI. Ask me anything about this video, and I'll use the lecture context to explain it." }]);
+    setMessages([{ id: 1, role: 'ai', content: "Xin chào! Tôi là Learning Hub AI. Hãy hỏi tôi bất cứ điều gì về video này, tôi sẽ dùng nội dung bài giảng để giải thích." }]);
   }, [lectureId]);
 
   const handleSend = async (retryContent?: string) => {
@@ -284,6 +287,7 @@ const AIChatbot = ({
       setInput('');
     }
     
+    requestStartRef.current = Date.now();
     setIsThinking(true);
 
     try {
@@ -328,7 +332,19 @@ const AIChatbot = ({
 
           // Strip metadata markers from visible content
           let displayContent = aiResponseContent;
+
+          // Detect retry markers and update status
+          const retryMatch = displayContent.match(/###RETRY###(.*?)###RETRY_END###/);
+          if (retryMatch) {
+            setRetryStatus(retryMatch[1]);
+            displayContent = displayContent.replace(/###RETRY###.*?###RETRY_END###/g, '');
+            aiResponseContent = aiResponseContent.replace(/###RETRY###.*?###RETRY_END###/g, '');
+            continue; // Don't process further, just update retry status
+          }
           
+          // Clear retry status when real content arrives
+          if (retryStatus) setRetryStatus(null);
+
           // Extracts confidence/source
           const metaMatch = displayContent.match(/###FRONTMETA###(.*?)###FRONTMETA_END###/);
           let metaData: any = null;
@@ -346,6 +362,7 @@ const AIChatbot = ({
           }
 
           if (isFirstChunk) {
+            const latencyMs = Date.now() - requestStartRef.current;
             setIsThinking(false);
             isFirstChunk = false;
             setMessages(prev => [...prev, { 
@@ -355,7 +372,8 @@ const AIChatbot = ({
               confidenceScore: metaData?.confidence_score,
               sourceCitation: metaData?.source_citation,
               historyId: historyId,
-              status: 'pending'
+              status: 'pending',
+              latencyMs
             }]);
           } else {
             setMessages(prev => prev.map(m => 
@@ -370,10 +388,17 @@ const AIChatbot = ({
           }
         }
       }
+
+      // Post-stream: detect backend errors streamed as text (e.g. "Error: ServerError: 503...")
+      if (aiResponseContent.trim().startsWith("Error:")) {
+        setMessages(prev => prev.map(m => 
+          m.id === aiMessageId ? { ...m, isError: true } : m
+        ));
+      }
     } catch (error) {
       console.error("HandleSend Error Catch:", error);
       setIsThinking(false);
-      setMessages(prev => [...prev, { id: Date.now(), role: 'ai', content: "Sorry, I ran into an error connecting to the API.", isError: true }]);
+      setMessages(prev => [...prev, { id: Date.now(), role: 'ai', content: "Xin lỗi, không thể kết nối tới AI. Vui lòng thử lại.", isError: true }]);
     }
   };
 
@@ -427,25 +452,41 @@ const AIChatbot = ({
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     ) : (
                       <>
-                        {/* Confidence & Source Badge */}
+                        {/* Confidence & Source Badge + Low-confidence Warning */}
                         {msg.role === 'ai' && msg.content && !msg.isError && (
-                          <div className="flex flex-wrap gap-2 mb-2">
-                             {msg.confidenceScore !== undefined && (
-                               <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
-                                 msg.confidenceScore >= 0.8 
-                                   ? 'bg-green-500/10 text-green-500 border border-green-500/20' 
-                                   : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
-                               }`}>
-                                 {msg.confidenceScore >= 0.8 ? <CheckCircle2 className="w-2.5 h-2.5" /> : <RotateCcw className="w-2.5 h-2.5" />}
-                                 {Math.round(msg.confidenceScore * 100)}% Confidence
-                               </div>
-                             )}
-                             {msg.sourceCitation && (
-                               <div className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold flex items-center gap-1">
-                                 <FileText className="w-2.5 h-2.5" />
-                                 Source: {msg.sourceCitation}
-                               </div>
-                             )}
+                          <div className="space-y-2 mb-2">
+                            {/* Yellow warning banner for low confidence */}
+                            {msg.confidenceScore !== undefined && msg.confidenceScore < 0.8 && (
+                              <div className="flex items-start gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                <RotateCcw className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                                <p className="text-[10px] font-medium text-amber-400 leading-relaxed">
+                                  ⚠️ AI không tìm thấy nội dung liên quan trực tiếp trong bài giảng. Câu trả lời dựa trên kiến thức chung.
+                                </p>
+                              </div>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              {msg.confidenceScore !== undefined && (
+                                <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+                                  msg.confidenceScore >= 0.8 
+                                    ? 'bg-green-500/10 text-green-500 border border-green-500/20' 
+                                    : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                                }`}>
+                                  {msg.confidenceScore >= 0.8 ? <CheckCircle2 className="w-2.5 h-2.5" /> : <RotateCcw className="w-2.5 h-2.5" />}
+                                  {Math.round(msg.confidenceScore * 100)}% Độ tin cậy
+                                </div>
+                              )}
+                              {msg.sourceCitation && (
+                                <div className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold flex items-center gap-1">
+                                  <FileText className="w-2.5 h-2.5" />
+                                  Nguồn: {msg.sourceCitation}
+                                </div>
+                              )}
+                              {msg.latencyMs !== undefined && (
+                                <div className="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant/60 text-[10px] font-bold">
+                                  {(msg.latencyMs / 1000).toFixed(1)}s
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -470,71 +511,125 @@ const AIChatbot = ({
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => submitSignal('understood', msg.historyId, msg.id)}
-                                  className="flex items-center gap-1.5 px-2 py-1 bg-green-500/10 text-green-600 rounded-md text-[10px] font-bold hover:bg-green-500/20 transition-colors"
+                                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-green-500/10 text-green-500 rounded-lg text-[10px] font-bold hover:bg-green-500/20 transition-colors border border-green-500/20"
                                 >
                                   <CheckCircle2 className="w-3 h-3" />
-                                  Understood
+                                  ✅ Đã hiểu
                                 </button>
                                 <button
                                   onClick={() => setReportingId(msg.id)}
-                                  className="flex items-center gap-1.5 px-2 py-1 bg-red-500/10 text-red-600 rounded-md text-[10px] font-bold hover:bg-red-500/20 transition-colors"
+                                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-[10px] font-bold hover:bg-red-500/20 transition-colors border border-red-500/20"
                                 >
                                   <RotateCcw className="w-3 h-3" />
-                                  Report Error
+                                  ❌ Báo sai
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const msgIndex = messages.findIndex(m => m.id === msg.id);
+                                    const lastUserMsg = messages.slice(0, msgIndex).reverse().find(m => m.role === 'user');
+                                    if (lastUserMsg) {
+                                      // Remove current AI message and retry
+                                      setMessages(prev => prev.filter(m => m.id !== msg.id));
+                                      handleSend(lastUserMsg.content);
+                                    }
+                                  }}
+                                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container-highest text-on-surface-variant rounded-lg text-[10px] font-bold hover:bg-surface-container-high hover:text-on-surface transition-colors border border-outline-variant/20"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  🔄 Thử lại
                                 </button>
                               </div>
                             )}
 
                             {msg.status === 'understood' && (
-                              <div className="text-[10px] font-bold text-green-600 flex items-center gap-1">
+                              <div className="text-[10px] font-bold text-green-500 flex items-center gap-1">
                                 <CheckCircle2 className="w-3 h-3" />
-                                Correct and Understood
+                                ✅ Đã xác nhận hiểu
                               </div>
                             )}
 
                             {msg.status === 'reported' && (
-                              <div className="text-[10px] font-bold text-red-600 flex items-center gap-1">
+                              <div className="text-[10px] font-bold text-red-500 flex items-center gap-1">
                                 <RotateCcw className="w-3 h-3" />
-                                Error Reported
+                                ❌ Đã báo lỗi
                               </div>
                             )}
 
                             {reportingId === msg.id && (
-                              <div className="bg-surface-container p-2 rounded-lg border border-outline-variant/20 space-y-2">
-                                <p className="text-[10px] font-bold text-on-surface-variant">What is the correct answer?</p>
+                              <div className="bg-surface-container p-2.5 rounded-lg border border-outline-variant/20 space-y-2">
+                                <p className="text-[10px] font-bold text-on-surface-variant">Câu trả lời đúng là gì?</p>
                                 <textarea
-                                  className="w-full bg-surface-container-lowest border-none rounded p-2 text-xs focus:ring-1 focus:ring-primary outline-none"
+                                  className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-lg p-2 text-xs focus:ring-1 focus:ring-primary outline-none resize-none"
                                   rows={2}
-                                  placeholder="Type correction here..."
+                                  placeholder="Nhập nội dung chính xác tại đây..."
                                   value={correctionText}
                                   onChange={(e) => setCorrectionText(e.target.value)}
                                 />
                                 <div className="flex justify-end gap-2">
-                                  <button onClick={() => setReportingId(null)} className="px-2 py-1 text-[10px] font-bold">Cancel</button>
+                                  <button onClick={() => setReportingId(null)} className="px-2.5 py-1 text-[10px] font-bold text-on-surface-variant hover:text-on-surface transition-colors">Hủy</button>
                                   <button 
                                     onClick={() => submitSignal('reported', msg.historyId, msg.id)}
-                                    className="px-2 py-1 bg-primary text-on-primary rounded text-[10px] font-bold"
+                                    className="px-2.5 py-1 bg-primary text-on-primary rounded-lg text-[10px] font-bold hover:bg-primary/90 transition-colors"
                                   >
-                                    Submit
+                                    Gửi báo cáo
                                   </button>
                                 </div>
                               </div>
                             )}
+
+                            {/* F3: Auto-suggest review if >3 consecutive AI messages without 'Đã hiểu' */}
+                            {(() => {
+                              const msgIdx = messages.findIndex(m => m.id === msg.id);
+                              // Count recent AI messages before this one that are still 'pending'
+                              let pendingCount = 0;
+                              for (let i = msgIdx; i >= 0; i--) {
+                                const m = messages[i];
+                                if (m.role === 'ai' && m.historyId && m.status === 'pending') pendingCount++;
+                                else if (m.role === 'ai' && m.status === 'understood') break;
+                              }
+                              // Only show on the latest pending AI message, and only if >3 pending
+                              const isLatestPending = msgIdx === messages.map((m, i) => m.role === 'ai' && m.historyId && m.status === 'pending' ? i : -1).filter(i => i >= 0).pop();
+                              if (pendingCount > 3 && isLatestPending) {
+                                return (
+                                  <div className="mt-2 p-2.5 rounded-lg bg-primary/5 border border-primary/20 flex items-start gap-2">
+                                    <Lightbulb className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                                    <div className="flex-1">
+                                      <p className="text-[10px] font-bold text-primary mb-1">💡 Gợi ý</p>
+                                      <p className="text-[10px] text-on-surface-variant leading-relaxed">Bạn đã hỏi nhiều câu mà chưa xác nhận hiểu. Bạn muốn xem lại phần video này không?</p>
+                                      <button 
+                                        onClick={() => {
+                                          const video = videoRef.current;
+                                          if (video) {
+                                            video.currentTime = Math.max(0, video.currentTime - 60);
+                                            video.play();
+                                          }
+                                        }}
+                                        className="mt-1.5 px-2.5 py-1 bg-primary/10 text-primary rounded-lg text-[10px] font-bold hover:bg-primary/20 transition-colors flex items-center gap-1.5"
+                                      >
+                                        <PlayCircle className="w-3 h-3" />
+                                        Xem lại 1 phút trước
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         )}
 
                         {msg.isError && (
-                          <div className="mt-3">
+                          <div className="mt-3 flex items-center gap-2">
                             <button
                               onClick={() => {
                                 const msgIndex = messages.findIndex(m => m.id === msg.id);
                                 const lastUserMsg = messages.slice(0, msgIndex).reverse().find(m => m.role === 'user');
                                 handleSend(lastUserMsg?.content);
                               }}
-                              className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-semibold hover:bg-primary/20 transition-colors"
+                              className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-semibold hover:bg-primary/20 transition-colors border border-primary/20"
                             >
                               <RotateCcw className="w-3.5 h-3.5" />
-                              Retry
+                              🔄 Thử lại
                             </button>
                           </div>
                         )}
@@ -553,7 +648,9 @@ const AIChatbot = ({
                     <Bot className="w-3.5 h-3.5 text-on-primary" />
                   </div>
                   <div className="bg-surface-container-lowest p-3 rounded-xl rounded-tl-sm border border-outline-variant/10 flex gap-2 items-center">
-                    <span className="text-xs text-on-surface-variant font-medium mr-1">Learning Hub AI is thinking</span>
+                    <span className="text-xs text-on-surface-variant font-medium mr-1">
+                      {retryStatus ? `⏳ Đang thử lại (${retryStatus})...` : 'AI đang suy nghĩ'}
+                    </span>
                     <div className="flex gap-1">
                       <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                       <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -570,7 +667,7 @@ const AIChatbot = ({
               <div className="bg-surface-container-lowest rounded-xl flex items-center p-2 ring-1 ring-outline-variant/20 focus-within:ring-primary/50 transition-shadow">
                 <input
                   className="bg-transparent border-none w-full text-sm font-body text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none p-1"
-                  placeholder="Ask about this concept..."
+                  placeholder="Hỏi về bài giảng này..."
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
