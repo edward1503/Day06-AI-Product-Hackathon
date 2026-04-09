@@ -10,7 +10,7 @@ export default function App() {
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-surface">
         <div className="bg-surface-container p-8 rounded-2xl border border-outline-variant/20 shadow-xl w-[400px] flex flex-col items-center">
           <h1 className="font-headline text-2xl font-bold text-on-surface mb-2">Welcome Back</h1>
-          <p className="font-body text-sm text-on-surface-variant mb-8 text-center">Log in to Obsidian Lens to continue your learning journey.</p>
+          <p className="font-body text-sm text-on-surface-variant mb-8 text-center">Log in to Learning Hub to continue your learning journey.</p>
           <button 
             onClick={() => setCurrentView('landing')}
             className="w-full flex items-center justify-center gap-3 bg-white text-black px-4 py-3 rounded-xl font-body font-medium hover:bg-neutral-100 transition-colors border border-neutral-200"

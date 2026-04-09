@@ -31,7 +31,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(205,189,255,0.3)]">
               <Bot className="w-6 h-6 text-on-primary" />
             </div>
-            <h1 className="font-headline text-2xl font-bold text-on-surface tracking-tight">OBSIDIAN LENS</h1>
+            <h1 className="font-headline text-2xl font-bold text-on-surface tracking-tight">LEARNING HUB</h1>
             <p className="font-body text-sm text-on-surface-variant mt-2 text-center">
               Enter your credentials to access your high-end learning environment.
             </p>

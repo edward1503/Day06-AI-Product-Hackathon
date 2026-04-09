@@ -97,12 +97,21 @@ const CourseSidebar = ({
           animate={{ opacity: 1 }}
           className="flex-1 min-w-0"
         >
-          <h2 className="font-headline text-lg font-medium text-on-surface truncate">Lectures & Info</h2>
-          <div className="flex items-center gap-2 mt-2">
-            <div className="h-1 flex-1 bg-surface-container-highest rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-primary to-primary-container w-[100%] rounded-full"></div>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-headline text-lg font-medium text-on-surface truncate">Lectures & Info</h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <div className="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary/40 rounded-full transition-all duration-300" 
+                  style={{ width: `${lessons.length > 0 ? (lessons.filter(l => l.status === 'completed').length / lessons.length) * 100 : 0}%` }}
+                ></div>
+              </div>
             </div>
-            <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Click to play</span>
+            <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
+              {lessons.filter(l => l.status === 'completed').length}/{lessons.length} COMPLETED
+            </span>
           </div>
         </motion.div>
       )}
@@ -124,26 +133,25 @@ const CourseSidebar = ({
           <button
             key={lesson.id}
             onClick={() => onSelectLesson(lesson.id)}
-            className={`w-full flex items-start gap-3 p-3 rounded-lg transition-colors group relative overflow-hidden ${lesson.status === 'playing' ? 'bg-surface-container-highest' : 'hover:bg-surface-container'
-              }`}
+            className={`w-full flex items-start gap-3 p-3 rounded-lg transition-colors group relative overflow-hidden ${lesson.status === 'playing' ? 'bg-surface-container-highest' : 'hover:bg-surface-container'}`}
           >
             {lesson.status === 'playing' && (
-              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-primary-container" />
+              <motion.div layoutId="activeHighlight" className="absolute left-0 top-2 bottom-2 w-1 bg-primary rounded-r-full" />
             )}
-
-            {lesson.status === 'completed' && <CheckCircle2 className="w-5 h-5 text-primary mt-0.5" />}
-            {lesson.status === 'playing' && <PlayCircle className="w-5 h-5 text-primary mt-0.5 animate-pulse" />}
-            {lesson.status === 'locked' && <PlayCircle className="w-5 h-5 text-on-surface-variant/40 mt-0.5" />}
-
-            <div className="flex-1 text-left">
-              <p className={`font-body text-sm font-medium transition-colors ${lesson.status === 'locked' ? 'text-on-surface-variant/60 group-hover:text-on-surface' :
-                  lesson.status === 'playing' ? 'text-on-surface' : 'text-on-surface-variant group-hover:text-on-surface'
-                }`}>
-                {lesson.id}. {lesson.title}
-              </p>
-              <p className={`font-label text-xs mt-1 tracking-wide ${lesson.status === 'playing' ? 'text-primary' : 'text-on-surface-variant/60'
-                }`}>
-                {lesson.duration} {lesson.status === 'playing' ? '• Playing' : '• Ready'}
+            <div className="shrink-0 w-6 flex justify-center">
+              {lesson.status === 'completed' && <CheckCircle2 className="w-5 h-5 text-primary mt-0.5" />}
+              {lesson.status === 'playing' && <PlayCircle className="w-5 h-5 text-primary mt-0.5 animate-pulse" />}
+              {lesson.status === 'locked' && <PlayCircle className="w-5 h-5 text-on-surface-variant/40 mt-0.5" />}
+            </div>
+            <div className="flex-1 text-left min-w-0">
+              <h3 className={`font-body text-sm font-medium leading-snug break-words ${
+                lesson.status === 'completed' ? 'text-primary' :
+                lesson.status === 'playing' ? 'text-on-surface' : 'text-on-surface-variant group-hover:text-on-surface'
+              }`}>
+                {lesson.title}
+              </h3>
+              <p className={`font-label text-xs mt-1 tracking-wide ${lesson.status === 'playing' ? 'text-primary' : 'text-on-surface-variant/60'}`}>
+                {lesson.duration} {lesson.status === 'playing' ? '• Playing' : lesson.status === 'completed' ? '• Done' : '• Ready'}
               </p>
             </div>
           </button>
@@ -153,10 +161,12 @@ const CourseSidebar = ({
   </motion.aside>
 );
 
-const VideoPlayer = ({ videoUrl, videoRef }: { videoUrl?: string, videoRef: React.RefObject<HTMLVideoElement | null> }) => (
+const VideoPlayer = ({ videoUrl, videoRef, lectureId }: { videoUrl?: string, videoRef: React.RefObject<HTMLVideoElement | null>, lectureId?: string }) => (
   <div className="flex-1 bg-black m-4 rounded-xl overflow-hidden relative group">
     {videoUrl ? (
-      <video ref={videoRef as any} src={videoUrl} controls autoPlay className="w-full h-full object-contain" />
+      <video crossOrigin="anonymous" ref={videoRef as any} src={videoUrl} controls autoPlay className="w-full h-full object-contain">
+        {lectureId && <track kind="subtitles" src={`/api/lectures/${lectureId}/subtitles.vtt`} srcLang="en" label="English" default />}
+      </video>
     ) : (
       <>
         {/* Video Placeholder Background fallback */}
@@ -197,7 +207,7 @@ const AIChatbot = ({
 
   // Reset chat on lecture change
   useEffect(() => {
-    setMessages([{ id: 1, role: 'ai', content: "Hello! I'm Obsidian AI. Ask me anything about this video, and I'll use the lecture context to explain it." }]);
+    setMessages([{ id: 1, role: 'ai', content: "Hello! I'm Learning Hub AI. Ask me anything about this video, and I'll use the lecture context to explain it." }]);
   }, [lectureId]);
 
   const handleSend = async () => {
@@ -248,7 +258,7 @@ const AIChatbot = ({
   };
 
   return (
-    <div className="absolute bottom-6 right-8 flex flex-col items-end z-30 pointer-events-none">
+    <div className="fixed bottom-6 right-6 flex flex-col items-end z-50 pointer-events-none">
       <AnimatePresence>
         {!isCollapsed && (
           <motion.div
@@ -265,7 +275,7 @@ const AIChatbot = ({
                   <Bot className="w-3.5 h-3.5 text-on-primary" />
                   <div className="absolute inset-0 rounded-full animate-ping bg-primary opacity-20"></div>
                 </div>
-                <span className="font-label text-[10px] uppercase tracking-[0.08em] font-semibold text-primary">Obsidian AI</span>
+                <span className="font-label text-[10px] uppercase tracking-[0.08em] font-semibold text-primary">Learning Hub AI</span>
               </div>
               <button
                 onClick={onToggle}
@@ -307,7 +317,7 @@ const AIChatbot = ({
                     <Bot className="w-3.5 h-3.5 text-on-primary" />
                   </div>
                   <div className="bg-surface-container-lowest p-3 rounded-xl rounded-tl-sm border border-outline-variant/10 flex gap-2 items-center">
-                    <span className="text-xs text-on-surface-variant font-medium mr-1">Obsidian AI is thinking</span>
+                    <span className="text-xs text-on-surface-variant font-medium mr-1">Learning Hub AI is thinking</span>
                     <div className="flex gap-1">
                       <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                       <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -357,9 +367,51 @@ const AIChatbot = ({
   );
 };
 
-const RightSidebar = ({ isCollapsed, onToggle, lectureId }: { isCollapsed: boolean, onToggle: () => void, lectureId?: string }) => {
+const RightSidebar = ({ isCollapsed, onToggle, lectureId, videoRef }: { isCollapsed: boolean, onToggle: () => void, lectureId?: string, videoRef: React.RefObject<HTMLVideoElement | null> }) => {
   const [chapters, setChapters] = useState<any[]>([]);
   const [slides, setSlides] = useState<{name: string, url: string}[]>([]);
+  const [activeChapterIndex, setActiveChapterIndex] = useState<number>(-1);
+  const outlineContainerRef = useRef<HTMLDivElement>(null);
+
+  // Time tracking effect
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || chapters.length === 0) return;
+
+    const parseTime = (timeStr: string) => {
+      if (!timeStr) return 0;
+      const parts = timeStr.split(':').map(Number);
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    };
+
+    const chapterTimes = chapters.map(c => parseTime(c.timestamp || c.start_time));
+
+    const handleTimeUpdate = () => {
+      const currentTime = video.currentTime;
+      let activeIdx = -1;
+      for (let i = 0; i < chapterTimes.length; i++) {
+        if (currentTime >= chapterTimes[i]) {
+          activeIdx = i;
+        } else {
+          break;
+        }
+      }
+      setActiveChapterIndex(activeIdx);
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [chapters, videoRef]);
+
+  // Scroll to active chapter
+  useEffect(() => {
+    if (activeChapterIndex >= 0 && outlineContainerRef.current) {
+      const activeEl = outlineContainerRef.current.children[activeChapterIndex] as HTMLElement;
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [activeChapterIndex]);
 
   useEffect(() => {
     if (!lectureId) {
@@ -434,22 +486,53 @@ const RightSidebar = ({ isCollapsed, onToggle, lectureId }: { isCollapsed: boole
           {/* T.O.C. Section */}
           <div className="space-y-4">
             <h3 className="font-label text-[10px] uppercase tracking-[0.1em] text-on-surface-variant/60 font-bold px-3">Lecture Outline</h3>
-            <div className="space-y-1">
+            
+            <div 
+              ref={outlineContainerRef}
+              className="space-y-1 max-h-[210px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-outline-variant/30 [&::-webkit-scrollbar-thumb]:rounded-full"
+            >
               {chapters.length === 0 ? (
                 <div className="px-3 text-xs text-on-surface-variant">No outline available.</div>
               ) : (
-                chapters.map((chap, idx) => (
-                  <div key={idx} className="flex gap-4 p-3 rounded-lg hover:bg-surface-container transition-colors cursor-pointer group">
-                    <div className="w-1.5 h-1.5 rounded-full bg-outline-variant/30 mt-1.5 shrink-0 group-hover:bg-primary transition-colors"></div>
-                    <div className="flex-1">
-                      <p className="font-body text-sm text-on-surface-variant group-hover:text-on-surface leading-tight transition-colors">{chap.topic_title || chap.title}</p>
-                      <p className="font-label text-[10px] text-on-surface-variant/50 mt-1">{chap.timestamp || chap.start_time}</p>
+                chapters.map((chap, idx) => {
+                  const isActive = idx === activeChapterIndex;
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`flex gap-4 p-3 rounded-lg transition-all cursor-pointer group ${isActive ? 'bg-primary/10 border border-primary/20 shadow-sm' : 'hover:bg-surface-container'}`}
+                    >
+                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 transition-colors ${isActive ? 'bg-primary shadow-[0_0_8px_rgba(var(--color-primary),0.8)]' : 'bg-outline-variant/30 group-hover:bg-primary/50'}`}></div>
+                      <div className="flex-1">
+                        <p className={`font-body text-sm leading-tight transition-colors ${isActive ? 'text-primary font-medium' : 'text-on-surface-variant group-hover:text-on-surface'}`}>{chap.topic_title || chap.title}</p>
+                        <p className={`font-label text-[10px] mt-1 ${isActive ? 'text-primary/70' : 'text-on-surface-variant/50'}`}>{chap.timestamp || chap.start_time}</p>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
+
+          {/* Summary Section */}
+          {chapters.length > 0 && activeChapterIndex >= 0 && chapters[activeChapterIndex].detailed_summary ? (
+            <div className="space-y-3">
+              <h3 className="font-label text-[10px] uppercase tracking-[0.1em] text-on-surface-variant/60 font-bold px-3">Chapter Summary</h3>
+              <div className="px-3">
+                <p className="font-body text-xs text-on-surface-variant leading-relaxed bg-surface-container p-3 rounded-xl border border-outline-variant/10">
+                  {chapters[activeChapterIndex].detailed_summary}
+                </p>
+              </div>
+            </div>
+          ) : chapters.length > 0 && chapters[0].detailed_summary && (
+             <div className="space-y-3">
+              <h3 className="font-label text-[10px] uppercase tracking-[0.1em] text-on-surface-variant/60 font-bold px-3">Lecture Summary</h3>
+              <div className="px-3">
+                <p className="font-body text-xs text-on-surface-variant leading-relaxed bg-surface-container p-3 rounded-xl border border-outline-variant/10">
+                  {chapters[0].detailed_summary}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Resources Section */}
           {lectureId && slides.length > 0 && (
@@ -529,19 +612,21 @@ export default function Player({ onNavigate }: { onNavigate: (view: string) => v
           isCollapsed={isLeftSidebarCollapsed}
           onToggle={() => setIsLeftSidebarCollapsed(!isLeftSidebarCollapsed)}
         />
-        <section className="flex-1 bg-surface flex flex-col relative min-w-0">
-          <VideoPlayer videoUrl={activeLesson?.videoUrl} videoRef={videoRef} />
-          <AIChatbot
-            isCollapsed={isChatCollapsed}
-            onToggle={() => setIsChatCollapsed(!isChatCollapsed)}
-            lectureId={activeLesson?.originalId}
-            getCurrentTimestamp={getCurrentTimestamp}
-          />
+        <section className="flex-1 flex flex-col relative min-w-0 bg-surface">
+          <VideoPlayer videoUrl={activeLesson?.videoUrl} videoRef={videoRef} lectureId={activeLesson?.originalId} />
         </section>
+        
+        <AIChatbot
+          isCollapsed={isChatCollapsed}
+          onToggle={() => setIsChatCollapsed(!isChatCollapsed)}
+          lectureId={activeLesson?.originalId}
+          getCurrentTimestamp={getCurrentTimestamp}
+        />
         <RightSidebar
           isCollapsed={isRightSidebarCollapsed}
           onToggle={() => setIsRightSidebarCollapsed(!isRightSidebarCollapsed)}
           lectureId={activeLesson?.originalId}
+          videoRef={videoRef}
         />
       </main>
     </div>
