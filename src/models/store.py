@@ -55,17 +55,31 @@ class TranscriptLine(Base):
     
     lecture = relationship("Lecture", back_populates="transcript_lines")
 
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    password_hash = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    qa_history = relationship("QAHistory", back_populates="user", cascade="all, delete-orphan")
+
 class QAHistory(Base):
     __tablename__ = "qa_history"
     
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     lecture_id = Column(String, ForeignKey("lectures.id"))
     question = Column(Text)
     answer = Column(Text)
-    thoughts = Column(Text, nullable=True) # Quá trình suy nghĩ sâu
+    thoughts = Column(Text, nullable=True)
     current_timestamp = Column(Float)
-    image_base64 = Column(Text, nullable=True) # Ảnh đã chụp lúc đó
+    image_base64 = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="qa_history")
 
 def init_db():
     Base.metadata.create_all(bind=engine)

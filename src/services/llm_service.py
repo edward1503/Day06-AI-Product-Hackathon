@@ -17,7 +17,7 @@ file_handler = logging.FileHandler(os.path.join(LOG_DIR, "qa_history.log"), enco
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 qa_logger.addHandler(file_handler)
 
-def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, image_base64=None):
+def get_context_and_stream_gemini(lecture_id, current_timestamp, user_question, image_base64=None, user_id=None):
     db = SessionLocal()
     
     # 1. Get ToC
@@ -114,6 +114,7 @@ QUY TẮC:
 
         # 6. Save to DB
         history = QAHistory(
+            user_id=user_id,
             lecture_id=lecture_id,
             question=user_question,
             answer=full_answer,

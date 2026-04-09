@@ -6,15 +6,14 @@
 - Frontend: Vanilla JS + HTML (`src/api/static/index.html`)
 - Auth: Chưa có
 - Hosting: **Railway** — https://day06-ai-product-hackathon-production.up.railway.app/
-- Video: YouTube embed hoạt động (youtube_id trong DB), Drive embed sẵn sàng (cần set Drive File ID)
+- Video: **Cloudflare R2** direct MP4 (capture frame hoạt động), cần set `R2_BASE_URL` env var
 
 ## Features cần build (theo thứ tự ưu tiên)
 - [x] Session 1: Fix data pipeline (ToC keys, transcript parser, model name, ThinkingConfig)
 - [x] Session 2: Deploy lên Railway (Procfile, requirements.txt, .gitignore, PORT env var)
-- [x] Session 2.5: Video embed (YouTube iframe + Google Drive iframe + timestamp slider thủ công)
+- [x] Session 2.5: Video — Cloudflare R2 direct MP4 (thay YouTube/Drive iframe → giữ captureFrame)
 - [x] Session 3: Cloud DB — Neon PostgreSQL (code done, chờ set DATABASE_URL trên Railway)
 - [ ] Session 4: Clerk auth (Google login)
-- [ ] Session 5: Google Drive video (thay YouTube bằng video từ Drive nếu cần)
 
 ## Bugs đã fix
 1. **ToC ingestion**: code đọc sai key JSON — `table_of_contents`/`topic_title`/`detailed_summary`/`timestamp`
